@@ -58,16 +58,21 @@ def _get_client() -> DotClient:
 
 
 def _resolve_device(device_id: Optional[str]) -> str:
-    """Return the given device_id or fall back to the configured default."""
+    """Return the given device_id or fall back to ui_settings → .env → error."""
     if device_id:
         return device_id
+    # Fallback 1: UI-saved settings (ui_settings.json)
+    ui_device = _load_ui_settings().get("device_id")
+    if ui_device:
+        return ui_device
+    # Fallback 2: .env configuration
     default = get_settings().dot_default_device_id
-    if not default:
-        raise HTTPException(
-            status_code=400,
-            detail="device_id is required (no default configured)",
-        )
-    return default
+    if default:
+        return default
+    raise HTTPException(
+        status_code=400,
+        detail="device_id is required (no default configured)",
+    )
 
 
 @asynccontextmanager

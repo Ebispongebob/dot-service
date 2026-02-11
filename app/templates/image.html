@@ -10,6 +10,14 @@
 <div class="card">
   <div class="card-title">选择图片</div>
 
+  <div class="form-group">
+    <label for="deviceSelect">目标设备</label>
+    <select id="deviceSelect" class="form-control">
+      <option value="">加载中...</option>
+    </select>
+    <div class="hint">选择要推送内容的设备</div>
+  </div>
+
   <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
     <input type="file" id="fileInput" accept="image/*">
     <div class="drop-text">
@@ -165,6 +173,8 @@ async function sendImage() {
 
   const formData = new FormData();
   formData.append('file', selectedFile);
+  const deviceId = getSelectedDevice('deviceSelect');
+  if (deviceId) formData.append('device_id', deviceId);
   formData.append('refresh_now', document.getElementById('refreshNow').checked);
   formData.append('border', document.getElementById('borderToggle').checked ? 1 : 0);
   formData.append('dither_type', ditherType);
@@ -188,5 +198,8 @@ async function sendImage() {
   btn.disabled = false;
   btn.textContent = '发送到屏幕';
 }
+
+// Load device selector on page init
+loadDeviceSelector('deviceSelect');
 </script>
 {% endblock %}

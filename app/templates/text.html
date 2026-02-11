@@ -11,6 +11,13 @@
   <div class="card-title">文字内容</div>
   <form id="textForm" onsubmit="return false;">
     <div class="form-group">
+      <label for="deviceSelect">目标设备</label>
+      <select id="deviceSelect" class="form-control">
+        <option value="">加载中...</option>
+      </select>
+      <div class="hint">选择要推送内容的设备</div>
+    </div>
+    <div class="form-group">
       <label for="title">标题</label>
       <input type="text" id="title" name="title" placeholder="例如：今日名言">
       <div class="hint">显示在屏幕顶部的大字标题</div>
@@ -162,20 +169,22 @@ async function sendText() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner spinner-white"></span> 发送中...';
 
+  const deviceId = getSelectedDevice('deviceSelect');
+
   try {
     let resp;
     if (sendMode === 'text') {
+      const payload = { title, message, signature, refresh_now: refreshNow };
+      if (deviceId) payload.device_id = deviceId;
       resp = await api('/text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title, message, signature,
-          refresh_now: refreshNow
-        })
+        body: JSON.stringify(payload)
       });
     } else {
       // text-to-image mode
       const params = new URLSearchParams();
+      if (deviceId) params.set('device_id', deviceId);
       if (title) params.set('title', title);
       if (message) params.set('message', message);
       if (signature) params.set('signature', signature);
@@ -197,5 +206,8 @@ async function sendText() {
   btn.disabled = false;
   btn.textContent = '发送到屏幕';
 }
+
+// Load device selector on page init
+loadDeviceSelector('deviceSelect');
 </script>
 {% endblock %}
