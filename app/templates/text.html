@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}发送文字 — Dot Service{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>发送文字</h2>
+  <p>向 Quote/0 屏幕推送文字内容，立即显示在墨水屏上</p>
+</div>
+
+<div class="card">
+  <div class="card-title">文字内容</div>
+  <form id="textForm" onsubmit="return false;">
+    <div class="form-group">
+      <label for="title">标题</label>
+      <input type="text" id="title" name="title" placeholder="例如：今日名言">
+      <div class="hint">显示在屏幕顶部的大字标题</div>
+    </div>
+    <div class="form-group">
+      <label for="message">正文</label>
+      <textarea id="message" name="message" rows="4" placeholder="例如：生活不是等待暴风雨过去，而是学会在雨中跳舞。"></textarea>
+      <div class="hint">主要内容，会自动换行适配屏幕</div>
+    </div>
+    <div class="form-group">
+      <label for="signature">署名</label>
+      <input type="text" id="signature" name="signature" placeholder="例如：—— 维维安·格林">
+      <div class="hint">显示在屏幕底部的小字署名</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>发送方式</label>
+        <div class="option-group" id="sendModeGroup">
+          <div class="option-chip selected" data-value="text" onclick="setSendMode('text')">文字 API</div>
+          <div class="option-chip" data-value="image" onclick="setSendMode('image')">渲染为图片</div>
+        </div>
+        <div class="hint">「文字 API」使用设备内置排版；「渲染为图片」由服务器排版，支持自定义字号</div>
+      </div>
+      <div class="form-group">
+        <label>立即显示</label>
+        <div class="toggle-wrap">
+          <input type="checkbox" class="toggle" id="refreshNow" checked>
+          <span class="text-sm">发送后立即刷新屏幕</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Font size options (only for image mode) -->
+    <div id="fontOptions" class="hidden">
+      <div class="form-row">
+        <div class="form-group">
+          <label for="titleSize">标题字号</label>
+          <input type="number" id="titleSize" value="18" min="8" max="36">
+        </div>
+        <div class="form-group">
+          <label for="messageSize">正文字号</label>
+          <input type="number" id="messageSize" value="14" min="8" max="36">
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="sendBtn" onclick="sendText()">
+      发送到屏幕
+    </button>
+  </form>
+</div>
+
+<!-- Live preview -->
+<div class="card">
+  <div class="card-title">预览效果（示意）</div>
+  <div class="preview-wrap">
+    <div class="preview-canvas-wrap">
+      <canvas id="previewCanvas" class="preview-canvas" width="296" height="152"></canvas>
+    </div>
+  </div>
+  <div class="text-sm text-muted">此预览为近似效果，实际显示由设备排版决定</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let sendMode = 'text';
+
+function setSendMode(mode) {
+  sendMode = mode;
+  document.querySelectorAll('#sendModeGroup .option-chip').forEach(c => {
+    c.classList.toggle('selected', c.dataset.value === mode);
+  });
+  document.getElementById('fontOptions').classList.toggle('hidden', mode !== 'image');
+}
+
+// Live preview
+function updatePreview() {
+  const canvas = document.getElementById('previewCanvas');
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, 296, 152);
+  ctx.fillStyle = '#000';
+
+  const title = document.getElementById('title').value;
+  const message = document.getElementById('message').value;
+  const signature = document.getElementById('signature').value;
+
+  let y = 16;
+  if (title) {
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(title, 8, y + 14);
+    y += 24;
+  }
+  if (message) {
+    ctx.font = '12px sans-serif';
+    const lines = wrapText(ctx, message, 280);
+    for (const line of lines) {
+      if (y > 130) break;
+      ctx.fillText(line, 8, y + 12);
+      y += 16;
+    }
+  }
+  if (signature) {
+    ctx.font = '10px sans-serif';
+    const sw = ctx.measureText(signature).width;
+    ctx.fillText(signature, 296 - 8 - sw, 152 - 10);
+  }
+}
+
+function wrapText(ctx, text, maxW) {
+  const result = [];
+  for (const para of text.split('\n')) {
+    if (!para) { result.push(''); continue; }
+    let line = '';
+    for (const ch of para) {
+      const test = line + ch;
+      if (ctx.measureText(test).width > maxW && line) {
+        result.push(line);
+        line = ch;
+      } else {
+        line = test;
+      }
+    }
+    if (line) result.push(line);
+  }
+  return result;
+}
+
+['title', 'message', 'signature'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updatePreview);
+});
+updatePreview();
+
+async function sendText() {
+  const btn = document.getElementById('sendBtn');
+  const title = document.getElementById('title').value || undefined;
+  const message = document.getElementById('message').value || undefined;
+  const signature = document.getElementById('signature').value || undefined;
+  const refreshNow = document.getElementById('refreshNow').checked;
+
+  if (!title && !message && !signature) {
+    toast('请至少填写一项内容', 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner spinner-white"></span> 发送中...';
+
+  try {
+    let resp;
+    if (sendMode === 'text') {
+      resp = await api('/text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title, message, signature,
+          refresh_now: refreshNow
+        })
+      });
+    } else {
+      // text-to-image mode
+      const params = new URLSearchParams();
+      if (title) params.set('title', title);
+      if (message) params.set('message', message);
+      if (signature) params.set('signature', signature);
+      params.set('refresh_now', refreshNow);
+      params.set('title_size', document.getElementById('titleSize').value);
+      params.set('message_size', document.getElementById('messageSize').value);
+      resp = await api('/text-to-image?' + params.toString(), { method: 'POST' });
+    }
+
+    if (resp.success) {
+      toast('文字已发送到屏幕!', 'success');
+    } else {
+      toast('发送失败: ' + (resp.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    toast('发送失败: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '发送到屏幕';
+}
+</script>
+{% endblock %}

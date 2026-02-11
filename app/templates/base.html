@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Dot Service{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- Mobile menu toggle -->
+<button class="menu-toggle" id="menuToggle">&#9776;</button>
+<div class="menu-overlay" id="menuOverlay"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <h1>Dot Service</h1>
+    <div class="sub">Quote/0 e-ink 控制台</div>
+  </div>
+  <ul class="sidebar-nav">
+    <li>
+      <a href="/" class="{% if active == 'dashboard' %}active{% endif %}">
+        <span class="icon">&#9632;</span> 设备概览
+      </a>
+    </li>
+    <li>
+      <a href="/ui/text" class="{% if active == 'text' %}active{% endif %}">
+        <span class="icon">&#9998;</span> 发送文字
+      </a>
+    </li>
+    <li>
+      <a href="/ui/image" class="{% if active == 'image' %}active{% endif %}">
+        <span class="icon">&#9881;</span> 发送图片
+      </a>
+    </li>
+    <li>
+      <a href="/ui/settings" class="{% if active == 'settings' %}active{% endif %}">
+        <span class="icon">&#9881;</span> 设置
+      </a>
+    </li>
+  </ul>
+  <div class="sidebar-footer">
+    Dot Service v1.0 &mdash; Quote/0 296&times;152
+  </div>
+</aside>
+
+<!-- Main content -->
+<main class="main">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- Toast container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+
+<script>
+  // Mobile sidebar toggle
+  const toggle = document.getElementById('menuToggle');
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('menuOverlay');
+  toggle.addEventListener('click', () => {
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+  });
+  overlay.addEventListener('click', () => {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('open');
+  });
+</script>
+</body>
+</html>

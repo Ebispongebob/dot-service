@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}发送图片 — Dot Service{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>发送图片</h2>
+  <p>上传图片到 Quote/0 墨水屏，自动缩放至 296x152 像素</p>
+</div>
+
+<div class="card">
+  <div class="card-title">选择图片</div>
+
+  <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="drop-text">
+      <strong>点击选择图片</strong> 或将图片拖放到这里<br>
+      <span class="text-sm text-muted">支持 PNG、JPG、BMP、GIF</span>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="preview-wrap hidden" id="previewArea">
+    <div class="preview-label">预览（296 x 152 缩放效果）</div>
+    <div class="preview-canvas-wrap">
+      <canvas id="previewCanvas" class="preview-canvas" width="296" height="152"></canvas>
+    </div>
+    <div class="text-sm text-muted mt-4" id="fileInfo"></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">显示选项</div>
+
+  <div class="form-group">
+    <label>抖动算法</label>
+    <div class="option-group" id="ditherGroup">
+      <div class="option-chip selected" data-value="DIFFUSION" onclick="selectDither(this)">平滑扩散</div>
+      <div class="option-chip" data-value="ORDERED" onclick="selectDither(this)">有序网格</div>
+      <div class="option-chip" data-value="NONE" onclick="selectDither(this)">不处理</div>
+    </div>
+    <div class="hint">抖动算法影响灰度图片在黑白墨水屏上的显示效果。「平滑扩散」适合照片，「不处理」适合纯黑白线条图</div>
+  </div>
+
+  <div class="form-group" id="kernelGroup">
+    <label>扩散核</label>
+    <div class="option-group" id="kernelChips">
+      <div class="option-chip selected" data-value="FLOYD_STEINBERG" onclick="selectKernel(this)">Floyd-Steinberg</div>
+      <div class="option-chip" data-value="ATKINSON" onclick="selectKernel(this)">Atkinson</div>
+      <div class="option-chip" data-value="STUCKI" onclick="selectKernel(this)">Stucki</div>
+      <div class="option-chip" data-value="BURKES" onclick="selectKernel(this)">Burkes</div>
+      <div class="option-chip" data-value="SIERRA2" onclick="selectKernel(this)">Sierra-2</div>
+    </div>
+    <div class="hint">不同的扩散核产生不同的灰度纹理效果</div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label>边框</label>
+      <div class="toggle-wrap">
+        <input type="checkbox" class="toggle" id="borderToggle">
+        <span class="text-sm">显示黑色边框</span>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>立即显示</label>
+      <div class="toggle-wrap">
+        <input type="checkbox" class="toggle" id="refreshNow" checked>
+        <span class="text-sm">发送后立即刷新屏幕</span>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn btn-primary btn-block" id="sendBtn" onclick="sendImage()" disabled>
+    发送到屏幕
+  </button>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedFile = null;
+let ditherType = 'DIFFUSION';
+let ditherKernel = 'FLOYD_STEINBERG';
+
+function selectDither(el) {
+  ditherType = el.dataset.value;
+  document.querySelectorAll('#ditherGroup .option-chip').forEach(c =>
+    c.classList.toggle('selected', c.dataset.value === ditherType)
+  );
+  // Show/hide kernel group based on dither type
+  document.getElementById('kernelGroup').classList.toggle('hidden', ditherType !== 'DIFFUSION');
+}
+
+function selectKernel(el) {
+  ditherKernel = el.dataset.value;
+  document.querySelectorAll('#kernelChips .option-chip').forEach(c =>
+    c.classList.toggle('selected', c.dataset.value === ditherKernel)
+  );
+}
+
+// Drop zone
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+['dragenter', 'dragover'].forEach(ev => {
+  dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+});
+['dragleave', 'drop'].forEach(ev => {
+  dropZone.addEventListener(ev, e => { e.preventDefault(); dropZone.classList.remove('dragover'); });
+});
+dropZone.addEventListener('drop', e => {
+  const files = e.dataTransfer.files;
+  if (files.length > 0) handleFile(files[0]);
+});
+fileInput.addEventListener('change', e => {
+  if (e.target.files.length > 0) handleFile(e.target.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.type.startsWith('image/')) {
+    toast('请选择图片文件', 'warning');
+    return;
+  }
+  selectedFile = file;
+
+  // Show preview
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      const canvas = document.getElementById('previewCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, 296, 152);
+
+      // Scale to fit 296x152, preserving aspect ratio
+      const scale = Math.min(296 / img.width, 152 / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      const x = (296 - w) / 2;
+      const y = (152 - h) / 2;
+      ctx.drawImage(img, x, y, w, h);
+
+      document.getElementById('previewArea').classList.remove('hidden');
+      document.getElementById('fileInfo').textContent =
+        file.name + ' (' + img.width + 'x' + img.height + ', ' + (file.size / 1024).toFixed(1) + ' KB)';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+
+  document.getElementById('sendBtn').disabled = false;
+}
+
+async function sendImage() {
+  if (!selectedFile) {
+    toast('请先选择一张图片', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner spinner-white"></span> 上传中...';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  formData.append('refresh_now', document.getElementById('refreshNow').checked);
+  formData.append('border', document.getElementById('borderToggle').checked ? 1 : 0);
+  formData.append('dither_type', ditherType);
+  formData.append('dither_kernel', ditherKernel);
+
+  try {
+    const resp = await api('/image/upload', {
+      method: 'POST',
+      body: formData
+      // Note: don't set Content-Type, browser sets multipart boundary
+    });
+    if (resp.success) {
+      toast('图片已发送到屏幕!', 'success');
+    } else {
+      toast('发送失败: ' + (resp.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    toast('发送失败: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '发送到屏幕';
+}
+</script>
+{% endblock %}

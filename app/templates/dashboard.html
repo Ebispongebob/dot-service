@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}设备概览 — Dot Service{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>设备概览</h2>
+  <p>查看你的 Quote/0 设备状态，一键切换内容</p>
+</div>
+
+<div id="deviceArea">
+  <div class="empty" id="loadingState">
+    <div class="spinner" style="margin: 0 auto 12px;"></div>
+    <p>正在加载设备信息...</p>
+  </div>
+</div>
+
+<div class="empty hidden" id="emptyState">
+  <div class="empty-icon">&#128268;</div>
+  <p>未找到已绑定的设备。请在「设置」中检查 API Key。</p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+(async function() {
+  const area = document.getElementById('deviceArea');
+  const empty = document.getElementById('emptyState');
+  const loading = document.getElementById('loadingState');
+
+  try {
+    const resp = await api('/devices');
+    if (!resp.success || !resp.data || resp.data.length === 0) {
+      loading.classList.add('hidden');
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    const devices = resp.data;
+    let html = '<div class="device-grid">';
+
+    for (const dev of devices) {
+      // Fetch status for each device
+      let status = null;
+      try {
+        const sr = await api('/devices/' + dev.id + '/status');
+        if (sr.success) status = sr.data;
+      } catch(e) {}
+
+      const si = status?.status || {};
+      const ri = status?.renderInfo || {};
+      const alias = status?.alias || dev.id;
+      const battery = si.battery || '--';
+      const wifi = si.wifi || '--';
+      const firmware = si.version || '--';
+      const lastRender = ri.last || '--';
+
+      // Screen image (from renderInfo.current.image)
+      let screenHtml = '';
+      const curImg = ri.current?.image;
+      if (curImg && curImg.length > 0) {
+        screenHtml = '<img class="screen-preview" src="data:image/png;base64,' + curImg[0] + '" alt="screen">';
+      } else {
+        screenHtml = '<div class="screen-preview" style="display:flex;align-items:center;justify-content:center;font-size:.8rem;color:var(--text-muted);">暂无画面</div>';
+      }
+
+      html += `
+        <div class="device-card">
+          <div class="device-header">
+            <div>
+              <div class="device-name">${esc(alias)}</div>
+              <div class="device-id">${esc(dev.id)}</div>
+            </div>
+            <span class="badge badge-ok">在线</span>
+          </div>
+          <div class="device-meta">
+            <div class="meta-item">
+              <span class="meta-label">电池</span>
+              <span class="meta-value">${esc(battery)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">WiFi</span>
+              <span class="meta-value">${esc(wifi)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">固件</span>
+              <span class="meta-value">${esc(firmware)}</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">上次刷新</span>
+              <span class="meta-value">${esc(lastRender)}</span>
+            </div>
+          </div>
+          ${screenHtml}
+          <div class="device-actions">
+            <button class="btn btn-primary btn-sm" onclick="switchNext('${dev.id}')">
+              切换下一条
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="refreshDevice('${dev.id}')">
+              刷新状态
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    html += '</div>';
+    area.innerHTML = html;
+
+  } catch(e) {
+    loading.classList.add('hidden');
+    empty.classList.remove('hidden');
+    toast('加载设备失败: ' + e.message, 'error');
+  }
+})();
+
+async function switchNext(deviceId) {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '切换中...';
+  try {
+    const resp = await api('/devices/' + deviceId + '/next', { method: 'POST' });
+    if (resp.success) {
+      toast('已切换到下一条内容', 'success');
+    } else {
+      toast('切换失败: ' + (resp.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    toast('切换失败: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '切换下一条';
+}
+
+async function refreshDevice(deviceId) {
+  toast('正在刷新...', 'success');
+  location.reload();
+}
+</script>
+{% endblock %}

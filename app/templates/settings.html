@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}设置 — Dot Service{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>设置</h2>
+  <p>配置 API 密钥和默认设备</p>
+</div>
+
+<div class="card">
+  <div class="card-title">连接配置</div>
+
+  <div class="form-group">
+    <label for="apiKey">API Key</label>
+    <div class="input-with-action">
+      <input type="password" id="apiKey" value="{{ api_key }}" placeholder="dot_app_xxxxxxxxxx">
+      <button class="btn btn-secondary btn-sm" onclick="toggleKeyVisibility()">显示</button>
+    </div>
+    <div class="hint">
+      在 <a href="https://dot.mindreset.tech" target="_blank" style="text-decoration:underline;">Dot. 开发者平台</a> 获取 API Key
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="deviceId">默认设备 ID</label>
+    <input type="text" id="deviceId" value="{{ device_id }}" placeholder="设备序列号">
+    <div class="hint">设置后无需每次手动输入设备 ID。可在设备底部找到序列号，或在「设备概览」页面查看</div>
+  </div>
+
+  <div class="form-group">
+    <label for="baseUrl">API 地址</label>
+    <input type="text" id="baseUrl" value="{{ base_url }}" placeholder="https://dot.mindreset.tech">
+    <div class="hint">通常不需要修改。除非你使用自部署的 Dot 服务端</div>
+  </div>
+
+  <button class="btn btn-primary" id="saveBtn" onclick="saveSettings()">
+    保存设置
+  </button>
+</div>
+
+<div class="card">
+  <div class="card-title">连接测试</div>
+  <p class="text-sm text-muted mb-4">验证 API Key 是否有效，以及能否正常获取设备列表</p>
+  <button class="btn btn-secondary" id="testBtn" onclick="testConnection()">
+    测试连接
+  </button>
+  <div id="testResult" class="mt-4 hidden"></div>
+</div>
+
+<div class="card">
+  <div class="card-title">关于</div>
+  <p class="text-sm text-muted">
+    Dot Service v1.0 &mdash; 基于 FastAPI 的 Quote/0 e-ink 控制服务<br>
+    屏幕分辨率：296 x 152 像素<br>
+    API 版本：authV2
+  </p>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleKeyVisibility() {
+  const input = document.getElementById('apiKey');
+  const btn = event.target;
+  if (input.type === 'password') {
+    input.type = 'text';
+    btn.textContent = '隐藏';
+  } else {
+    input.type = 'password';
+    btn.textContent = '显示';
+  }
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner spinner-white"></span> 保存中...';
+
+  try {
+    const resp = await api('/ui/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: document.getElementById('apiKey').value,
+        device_id: document.getElementById('deviceId').value,
+        base_url: document.getElementById('baseUrl').value,
+      })
+    });
+    if (resp.success) {
+      toast('设置已保存。重启服务后部分配置生效。', 'success');
+    } else {
+      toast('保存失败: ' + (resp.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '保存设置';
+}
+
+async function testConnection() {
+  const btn = document.getElementById('testBtn');
+  const result = document.getElementById('testResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 测试中...';
+  result.classList.add('hidden');
+
+  try {
+    const resp = await api('/devices');
+    result.classList.remove('hidden');
+    if (resp.success && resp.data) {
+      const count = Array.isArray(resp.data) ? resp.data.length : 0;
+      result.innerHTML = '<span class="badge badge-ok">连接成功</span> 找到 ' + count + ' 个设备';
+    } else {
+      result.innerHTML = '<span class="badge badge-err">连接失败</span> ' + esc(resp.message || '未知错误');
+    }
+  } catch(e) {
+    result.classList.remove('hidden');
+    result.innerHTML = '<span class="badge badge-err">连接失败</span> ' + esc(e.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '测试连接';
+}
+</script>
+{% endblock %}
