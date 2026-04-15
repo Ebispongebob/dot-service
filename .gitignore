@@ -8,3 +8,8 @@ ui_settings.json
 .venv/
 venv/
 *.egg
+
+# Local editor / cache noise
+.idea/
+.ruff_cache/
+AGENTS.md
