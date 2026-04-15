@@ -4,6 +4,7 @@ __pycache__/
 dist/
 build/
 .env
+ui_settings.json
 .venv/
 venv/
 *.egg

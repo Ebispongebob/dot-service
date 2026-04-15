@@ -140,21 +140,27 @@ def _save_ui_settings(data: dict) -> None:
 @app.get("/", tags=["ui"], include_in_schema=False)
 async def page_dashboard(request: Request):
     return templates.TemplateResponse(
-        "dashboard.html", {"request": request, "active": "dashboard"}
+        request,
+        "dashboard.html",
+        {"request": request, "active": "dashboard"},
     )
 
 
 @app.get("/ui/text", tags=["ui"], include_in_schema=False)
 async def page_text(request: Request):
     return templates.TemplateResponse(
-        "text.html", {"request": request, "active": "text"}
+        request,
+        "text.html",
+        {"request": request, "active": "text"},
     )
 
 
 @app.get("/ui/image", tags=["ui"], include_in_schema=False)
 async def page_image(request: Request):
     return templates.TemplateResponse(
-        "image.html", {"request": request, "active": "image"}
+        request,
+        "image.html",
+        {"request": request, "active": "image"},
     )
 
 
@@ -163,6 +169,7 @@ async def page_settings(request: Request):
     s = get_settings()
     saved = _load_ui_settings()
     return templates.TemplateResponse(
+        request,
         "settings.html",
         {
             "request": request,

@@ -30,8 +30,8 @@ Dot Service 是一个专为 **MindReset Dot. Quote/0** 墨水屏设备设计的�
 
 ### 2. 获取代码
 ```bash
-git clone https://github.com/yourusername/dot_service.git
-cd dot_service
+git clone git@github.com:Ebispongebob/dot-service.git
+cd dot-service
 ```
 
 ### 3. 安装依赖
@@ -47,12 +47,15 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 ```
-在 `.env` 文件中填入你的 API Key 和默认设备 ID：
+在 `.env` 文件中至少填入你的 API Key；默认设备 ID 可选：
 ```ini
 DOT_API_KEY=dot_app_xxxxxxxxxxxx
 DOT_DEFAULT_DEVICE_ID=xxxxxxxxxxxx
+DOT_API_BASE_URL=https://dot.mindreset.tech
+SERVICE_HOST=0.0.0.0
+SERVICE_PORT=8000
 ```
-*注：你也可以在 Web 界面的“设置”页面动态修改这些配置。*
+*注：你也可以在 Web 界面的“设置”页面保存这些值。界面保存的数据会写入本地 `ui_settings.json`，该文件仅用于本机运行，不应提交到 Git。*
 
 ### 5. 启动服务
 直接运行启动脚本：
@@ -65,6 +68,14 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 服务启动后，访问 **http://localhost:8000** 即可进入控制台。
+
+如果看到 `Address already in use`，说明 8000 端口已被占用。可以修改 `.env` 中的 `SERVICE_PORT`，或者直接执行：
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+```
+
+如果接口正常但页面返回 500，请确认你使用的是当前版本代码；当前版本已经兼容新版 Starlette 的模板渲染调用方式。
 
 ## 📖 使用指南
 
@@ -86,7 +97,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ## 📂 项目结构
 
 ```
-dot_service/
+dot-service/
 ├── app/
 │   ├── static/          # CSS, JS 静态资源
 │   ├── templates/       # Jinja2 HTML 模板
@@ -96,6 +107,7 @@ dot_service/
 │   ├── main.py          # FastAPI 应用入口与路由
 │   └── models.py        # Pydantic 数据模型
 ├── .env.example         # 环境变量示例
+├── .gitignore           # 本地敏感配置忽略规则
 ├── run.py               # 启动脚本
 └── requirements.txt     # 项目依赖
 ```
