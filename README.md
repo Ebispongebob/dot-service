@@ -12,6 +12,7 @@ Dot Service 是一个面向 **MindReset Dot. Quote/0** 墨水屏设备的自托�
 - 文字转图片：`POST /text-to-image`，适合自定义字号和版式
 - 图片发送：`POST /image` / `POST /image/upload`
 - 上传图片时会自动缩放到 `296x152`
+- 飞书消息通知桥：通过 `lark-cli` 定时轮询飞书群聊/私聊，按关键词或 @ 过滤后推送到 Dot
 
 ## 快速开始
 
@@ -40,6 +41,33 @@ SERVICE_PORT=8000
 
 也可以在 `/ui/settings` 页面保存配置。页面保存的数据会写入仓库根目录的 `ui_settings.json`，不要提交到 Git。
 
+### 飞书通知桥配置（可选）
+1. 安装并初始化 `lark-cli`。
+2. 按需授权消息读取权限，例如用户身份：
+
+```bash
+lark-cli auth login --scope "im:message:readonly im:chat:read"
+```
+
+3. 在 `.env` 中启用并配置消息来源：
+
+```ini
+LARK_NOTIFY_ENABLED=true
+LARK_NOTIFY_IDENTITY=user
+LARK_NOTIFY_MONITOR_ALL=true
+# 监听全部群聊时不需要填 LARK_NOTIFY_CHAT_IDS
+# 也可以额外指定：LARK_NOTIFY_CHAT_IDS=oc_xxx
+LARK_NOTIFY_KEYWORDS=@我,紧急,P0
+```
+
+或者直接在 Web UI (`/ui/lark`) 页面操作：开启「监听全部群聊」开关即可。
+
+启动服务后可通过以下接口检查和调试：
+
+- `GET /lark/notify/status`：查看轮询桥状态
+- `POST /lark/notify/poll?notify=false`：手动轮询但不推送
+- `POST /lark/notify/test`：发送一条测试 Dot 通知
+
 ### 3. 启动
 
 ```bash
@@ -58,6 +86,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `GET /health`
 - `GET /devices`
 - `GET /devices/{device_id}/status`
+- `GET /lark/notify/status`
+- `POST /lark/notify/poll`
+- `POST /lark/notify/test`
 - `POST /text`
 - `POST /text-to-image`
 - `POST /image`
@@ -70,12 +101,14 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 - `POST /text` 使用设备/云端的文字排版能力
 - `POST /text-to-image` 会先在服务端把文字渲染成图片，再通过图片接口发送
 - 修改 `.env` 后需要重启服务，运行中的进程不会自动重新读取配置
+- 飞书通知桥依赖本机 `lark-cli`；使用 `bot` 身份时机器人需要在目标群内，使用 `user` 身份时需要用户授权
 
 ## 代码结构
 
 - `app/main.py`：FastAPI 应用、UI 路由、API 路由
 - `app/dot_client.py`：Dot Cloud API 封装
 - `app/image_utils.py`：图片缩放、Base64 转换、文字渲染
+- `app/lark_bridge.py`：飞书消息轮询和 Dot 通知桥
 - `run.py`：本地开发启动入口
 
 ## 贡献

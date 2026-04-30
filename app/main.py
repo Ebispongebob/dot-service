@@ -28,6 +28,7 @@ from .image_utils import (
     render_text_to_image,
     resize_image_to_screen,
 )
+from .lark_bridge import LarkNotifyBridge
 from .models import (
     DitherKernel,
     DitherType,
@@ -48,6 +49,7 @@ _SETTINGS_FILE = _APP_DIR.parent / "ui_settings.json"
 # ── Shared client instance ──────────────────────────────────────────
 
 _dot_client: Optional[DotClient] = None
+_lark_bridge: Optional[LarkNotifyBridge] = None
 
 
 def _get_client() -> DotClient:
@@ -75,13 +77,57 @@ def _resolve_device(device_id: Optional[str]) -> str:
     )
 
 
+def _get_lark_bridge() -> LarkNotifyBridge:
+    """Return the singleton Lark notification bridge."""
+    global _lark_bridge
+    if _lark_bridge is None:
+        settings = _build_lark_settings()
+        _lark_bridge = LarkNotifyBridge(
+            settings, _get_client, lambda: _resolve_device(None)
+        )
+    return _lark_bridge
+
+
+def _build_lark_settings() -> "Settings":
+    """Build a Settings instance that merges .env + ui_settings.json."""
+    from .config import Settings
+    base = Settings().model_dump()
+    ui = _load_ui_settings()
+    for key, value in ui.items():
+        if key not in base:
+            continue
+        default = base[key]
+        if isinstance(default, bool):
+            if isinstance(value, bool):
+                base[key] = value
+            elif isinstance(value, str):
+                base[key] = value.lower() in ("true", "1", "yes")
+        elif isinstance(default, int):
+            if isinstance(value, (int, float)):
+                base[key] = int(value)
+            elif isinstance(value, str) and value.strip():
+                try:
+                    base[key] = int(value)
+                except ValueError:
+                    pass
+        elif isinstance(default, str):
+            if value is not None:
+                base[key] = str(value)
+    return Settings(**base)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Dot Service starting up ...")
-    yield
-    if _dot_client:
-        await _dot_client.close()
-    logger.info("Dot Service shut down.")
+    bridge = _get_lark_bridge()
+    await bridge.start()
+    try:
+        yield
+    finally:
+        await bridge.stop()
+        if _dot_client:
+            await _dot_client.close()
+        logger.info("Dot Service shut down.")
 
 
 # ── App ─────────────────────────────────────────────────────────────
@@ -129,7 +175,12 @@ def _load_ui_settings() -> dict:
 
 
 def _save_ui_settings(data: dict) -> None:
-    _SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+    # Merge with existing settings so we don't erase other sections.
+    existing = _load_ui_settings()
+    existing.update(data)
+    _SETTINGS_FILE.write_text(
+        json.dumps(existing, ensure_ascii=False, indent=2), "utf-8"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -181,6 +232,15 @@ async def page_settings(request: Request):
     )
 
 
+@app.get("/ui/lark", tags=["ui"], include_in_schema=False)
+async def page_lark_notify(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "lark_notify.html",
+        {"request": request, "active": "lark"},
+    )
+
+
 @app.post("/ui/api/settings", tags=["ui"], include_in_schema=False)
 async def save_settings(request: Request):
     """Save UI settings to ui_settings.json and hot-reload the client."""
@@ -212,6 +272,91 @@ async def save_settings(request: Request):
 @app.get("/health", tags=["health"])
 async def health():
     return {"status": "ok"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Lark / Feishu notification bridge
+# ═══════════════════════════════════════════════════════════════════
+
+
+@app.get("/lark/notify/status", tags=["lark"], response_model=ServiceResponse)
+async def lark_notify_status():
+    """Inspect the Lark polling notification bridge status."""
+    return ServiceResponse(success=True, message="ok", data=_get_lark_bridge().status())
+
+
+@app.post("/lark/notify/poll", tags=["lark"], response_model=ServiceResponse)
+async def lark_notify_poll(
+    notify: bool = Query(True, description="Whether matched messages should be sent to Dot"),
+):
+    """Poll configured Lark message sources once."""
+    bridge = _get_lark_bridge()
+    if not bridge.sources:
+        return ServiceResponse(
+            success=False,
+            message="No Lark sources configured",
+            data=bridge.status(),
+        )
+    data = await bridge.poll_once(notify=notify)
+    return ServiceResponse(success=True, message="Lark poll finished", data=data)
+
+
+@app.post("/lark/notify/test", tags=["lark"], response_model=ServiceResponse)
+async def lark_notify_test(
+    title: str = Query("飞书通知"),
+    message: str = Query("这是一条 Dot Service 飞书通知测试"),
+    signature: str = Query("Lark Bridge"),
+):
+    """Send a test notification through the same Dot path used by Lark polling."""
+    try:
+        data = await _get_lark_bridge().send_test_notification(
+            title=title, message=message, signature=signature
+        )
+        return ServiceResponse(success=True, message="Test notification sent", data=data)
+    except DotClientError as e:
+        raise _handle_dot_error(e)
+
+
+@app.post("/ui/api/lark_settings", tags=["ui"], include_in_schema=False)
+async def save_lark_settings(request: Request):
+    """Save Lark notification settings and hot-reload the bridge."""
+    body = await request.json()
+    data = {
+        "lark_notify_enabled": body.get("enabled", False),
+        "lark_notify_identity": body.get("identity", "user"),
+        "lark_notify_profile": body.get("profile", ""),
+        "lark_notify_chat_ids": body.get("chat_ids", ""),
+        "lark_notify_user_ids": body.get("user_ids", ""),
+        "lark_notify_keywords": body.get("keywords", ""),
+        "lark_notify_mention_ids": body.get("mention_ids", ""),
+        "lark_notify_monitor_all": body.get("monitor_all", False),
+        "lark_notify_poll_interval_seconds": body.get("poll_interval_seconds", 60),
+        "lark_notify_lookback_minutes": body.get("lookback_minutes", 10),
+        "lark_notify_max_messages_per_push": body.get("max_messages_per_push", 3),
+        "lark_notify_max_message_chars": body.get("max_message_chars", 48),
+        "lark_notify_skip_existing_on_start": body.get("skip_existing_on_start", True),
+        "lark_notify_dot_title": body.get("dot_title", "飞书通知"),
+        "lark_notify_dot_signature": body.get("dot_signature", "Lark Bridge"),
+    }
+    _save_ui_settings(data)
+
+    # Rebuild settings from env + ui_settings and reconfigure bridge
+    new_settings = _build_lark_settings()
+    global _lark_bridge
+    if _lark_bridge and _lark_bridge.running:
+        await _lark_bridge.stop()
+    _lark_bridge = LarkNotifyBridge(
+        new_settings, _get_client, lambda: _resolve_device(None)
+    )
+    has_sources = (
+        new_settings.lark_notify_monitor_all
+        or new_settings.lark_notify_chat_ids
+        or new_settings.lark_notify_user_ids
+    )
+    if new_settings.lark_notify_enabled and has_sources:
+        await _lark_bridge.start()
+
+    return {"success": True, "message": "Lark settings saved and bridge reloaded"}
 
 
 # ═══════════════════════════════════════════════════════════════════

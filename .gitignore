@@ -8,6 +8,7 @@ ui_settings.json
 .venv/
 venv/
 *.egg
+.runtime/
 
 # Local editor / cache noise
 .idea/

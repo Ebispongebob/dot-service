@@ -1,0 +1,346 @@
+{% extends "base.html" %}
+{% block title %}飞书通知 — Dot Service{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>飞书通知</h2>
+  <p>配置飞书消息轮询，关键消息自动推送到墨水屏</p>
+</div>
+
+<!-- ── Status ──────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">运行状态</div>
+  <div id="statusArea">
+    <div class="spinner" style="margin: 0 auto 12px;"></div>
+  </div>
+</div>
+
+<!-- ── Enable toggle ────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">开关</div>
+  <div class="toggle-wrap">
+    <input type="checkbox" class="toggle" id="larkEnabled">
+    <label for="larkEnabled" style="cursor:pointer;">启用飞书消息通知</label>
+  </div>
+  <div class="hint mt-4">开启后，服务会定时轮询飞书群聊/私聊，将匹配的消息推送到 Dot</div>
+  <div class="toggle-wrap mt-4">
+    <input type="checkbox" class="toggle" id="larkMonitorAll">
+    <label for="larkMonitorAll" style="cursor:pointer;">监听全部群聊</label>
+  </div>
+  <div class="hint">开启后自动发现并监听你加入的所有群聊，无需手动填写 Chat ID</div>
+</div>
+
+<!-- ── Config ──────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">连接配置</div>
+
+  <div class="form-group">
+    <label for="larkIdentity">身份</label>
+    <select id="larkIdentity">
+      <option value="user">用户身份 (user)</option>
+      <option value="bot">应用身份 (bot)</option>
+    </select>
+    <div class="hint">用户身份需要先 lark-cli auth login 授权；应用身份需确保机器人在目标群内</div>
+  </div>
+
+  <div class="form-group">
+    <label for="larkProfile">Profile <span class="text-muted text-sm">（可选）</span></label>
+    <input type="text" id="larkProfile" placeholder="留空使用默认 profile">
+    <div class="hint">lark-cli 多应用场景下指定 profile，一般留空</div>
+  </div>
+
+  <div class="form-group">
+    <label for="larkChatIds">群聊 Chat ID <span class="text-muted text-sm">（逗号分隔）</span></label>
+    <input type="text" id="larkChatIds" placeholder="oc_xxx,oc_yyy">
+    <div class="hint">在飞书群设置中获取 chat_id，或用 lark-cli im +chat-search 搜索</div>
+  </div>
+
+  <div class="form-group">
+    <label for="larkUserIds">私聊 User Open ID <span class="text-muted text-sm">（逗号分隔）</span></label>
+    <input type="text" id="larkUserIds" placeholder="ou_xxx,ou_yyy">
+    <div class="hint">监听指定私聊的消息</div>
+  </div>
+</div>
+
+<!-- ── Filters ────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">消息过滤</div>
+
+  <div class="form-group">
+    <label for="larkKeywords">关键词 <span class="text-muted text-sm">（逗号分隔）</span></label>
+    <input type="text" id="larkKeywords" placeholder="@我,紧急,P0,线上故障">
+    <div class="hint">只推送包含任一关键词的消息；留空则推送所有消息</div>
+  </div>
+
+  <div class="form-group">
+    <label for="larkMentionIds">Mention Open ID <span class="text-muted text-sm">（逗号分隔）</span></label>
+    <input type="text" id="larkMentionIds" placeholder="ou_xxx">
+    <div class="hint">只推送 @了指定用户的消息；留空不过滤。你的 open_id 可通过 lark-cli contact 获取</div>
+  </div>
+</div>
+
+<!-- ── Push behavior ──────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">推送行为</div>
+
+  <div class="form-group">
+    <label for="larkPollInterval">轮询间隔（秒）</label>
+    <input type="number" id="larkPollInterval" value="60" min="10" max="600" step="10">
+  </div>
+
+  <div class="form-group">
+    <label for="larkLookback">回看时间（分钟）</label>
+    <input type="number" id="larkLookback" value="10" min="1" max="60">
+    </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label for="larkMaxMessages">每次最多推送条数</label>
+      <input type="number" id="larkMaxMessages" value="3" min="1" max="10">
+    </div>
+    <div class="form-group">
+      <label for="larkMaxChars">每条最多字符数</label>
+      <input type="number" id="larkMaxChars" value="48" min="10" max="200">
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label for="larkDotTitle">Dot 标题</label>
+    <input type="text" id="larkDotTitle" value="飞书通知" placeholder="推送至墨水屏的标题">
+  </div>
+
+  <div class="form-group">
+    <label for="larkDotSignature">Dot 署名</label>
+    <input type="text" id="larkDotSignature" value="Lark Bridge" placeholder="推送至墨水屏的署名">
+  </div>
+
+  <div class="toggle-wrap mt-4">
+    <input type="checkbox" class="toggle" id="larkSkipExisting" checked>
+    <label for="larkSkipExisting" style="cursor:pointer;">启动时跳过已有消息</label>
+  </div>
+  <div class="hint">开启后首次轮询不会把历史消息推到墨水屏</div>
+
+  <div class="mt-4" style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary" id="saveBtn" onclick="saveLarkSettings()">
+      保存设置
+    </button>
+  </div>
+</div>
+
+<!-- ── Actions ─────────────────────────────────────────────── -->
+<div class="card">
+  <div class="card-title">调试</div>
+  <p class="text-sm text-muted mb-4">手动轮询或发送测试通知来验证配置是否正确</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-secondary" id="pollBtn" onclick="pollNow(false)">
+      轮询（不推送）
+    </button>
+    <button class="btn btn-secondary" id="pollPushBtn" onclick="pollNow(true)">
+      轮询并推送
+    </button>
+    <button class="btn btn-secondary" id="testBtn" onclick="sendTest()">
+      发送测试通知
+    </button>
+  </div>
+  <div id="actionResult" class="mt-4 hidden"></div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Load current status + settings ─────────────────────── */
+
+async function loadLarkData() {
+  try {
+    const st = await api('/lark/notify/status');
+    renderStatus(st.data || st);
+    fillForm(st.data || st);
+  } catch(e) {
+    document.getElementById('statusArea').innerHTML =
+      '<span class="badge badge-err">错误</span> ' + esc(e.message);
+  }
+}
+
+function renderStatus(d) {
+  const running = d.running;
+  const enabled = d.enabled;
+  const html = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
+      <div class="meta-item">
+        <span class="meta-label">状态</span>
+        <span class="meta-value">
+          ${enabled
+            ? (running ? '<span class="badge badge-ok">运行中</span>' : '<span class="badge badge-warn">已停止</span>')
+            : '<span class="badge badge-err">已禁用</span>'}
+        </span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">身份</span>
+        <span class="meta-value">${esc(d.identity || '—')}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">来源数</span>
+        <span class="meta-value">${d.sources ? d.sources.length : 0}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">已匹配</span>
+        <span class="meta-value">${d.matched_count ?? '—'}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">已推送</span>
+        <span class="meta-value">${d.notified_count ?? '—'}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">已跳过</span>
+        <span class="meta-value">${d.skipped_count ?? '—'}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">已去重</span>
+        <span class="meta-value">${d.seen_count ?? '—'}</span>
+      </div>
+      <div class="meta-item">
+        <span class="meta-label">上次轮询</span>
+        <span class="meta-value">${d.last_poll_at || '—'}</span>
+      </div>
+      ${d.last_error ? `<div class="meta-item" style="grid-column:1/-1;">
+        <span class="meta-label">最近错误</span>
+        <span class="meta-value" style="color:var(--error);word-break:break-all;">${esc(d.last_error)}</span>
+      </div>` : ''}
+      ${d.discovered_chats && d.discovered_chats.length ? `<div class="meta-item" style="grid-column:1/-1;">
+        <span class="meta-label">监听群聊</span>
+        <span class="meta-value" style="word-break:break-all;">${d.discovered_chats.map(c => esc(c.name || c.chat_id)).join(', ')}</span>
+      </div>` : ''}
+    </div>
+  `;
+  document.getElementById('statusArea').innerHTML = html;
+}
+
+function fillForm(d) {
+  // toggle
+  document.getElementById('larkEnabled').checked = d.enabled === true;
+  document.getElementById('larkMonitorAll').checked = d.monitor_all === true;
+  // config
+  document.getElementById('larkIdentity').value = d.identity || 'user';
+  document.getElementById('larkProfile').value = d.profile || '';
+  // sources - reconstruct comma-separated from array
+  const sources = d.sources || [];
+  const chats = sources.filter(s => s.type === 'chat').map(s => s.id).join(',');
+  const users = sources.filter(s => s.type === 'user').map(s => s.id).join(',');
+  document.getElementById('larkChatIds').value = chats;
+  document.getElementById('larkUserIds').value = users;
+  // filters
+  document.getElementById('larkKeywords').value = (d.keywords || []).join(',');
+  document.getElementById('larkMentionIds').value = (d.mention_ids || []).join(',');
+  // push behavior
+  document.getElementById('larkPollInterval').value = d.poll_interval_seconds || 60;
+  document.getElementById('larkLookback').value = d.lookback_minutes || 10;
+  document.getElementById('larkSkipExisting').checked = d.skip_existing_on_start !== false;
+  // dot display
+  // titles are not in status, leave defaults if not provided
+}
+
+/* ── Save settings ──────────────────────────────────────── */
+
+async function saveLarkSettings() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner spinner-white"></span> 保存中...';
+
+  const payload = {
+    enabled: document.getElementById('larkEnabled').checked,
+    monitor_all: document.getElementById('larkMonitorAll').checked,
+    identity: document.getElementById('larkIdentity').value,
+    profile: document.getElementById('larkProfile').value || '',
+    chat_ids: document.getElementById('larkChatIds').value,
+    user_ids: document.getElementById('larkUserIds').value,
+    keywords: document.getElementById('larkKeywords').value,
+    mention_ids: document.getElementById('larkMentionIds').value,
+    poll_interval_seconds: parseInt(document.getElementById('larkPollInterval').value) || 60,
+    lookback_minutes: parseInt(document.getElementById('larkLookback').value) || 10,
+    max_messages_per_push: parseInt(document.getElementById('larkMaxMessages').value) || 3,
+    max_message_chars: parseInt(document.getElementById('larkMaxChars').value) || 48,
+    skip_existing_on_start: document.getElementById('larkSkipExisting').checked,
+    dot_title: document.getElementById('larkDotTitle').value || '飞书通知',
+    dot_signature: document.getElementById('larkDotSignature').value || 'Lark Bridge',
+  };
+
+  try {
+    const resp = await api('/ui/api/lark_settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (resp.success) {
+      toast('飞书通知设置已保存并重载', 'success');
+      loadLarkData();
+    } else {
+      toast('保存失败: ' + (resp.message || '未知错误'), 'error');
+    }
+  } catch(e) {
+    toast('保存失败: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = '保存设置';
+}
+
+/* ── Actions ─────────────────────────────────────────────── */
+
+async function pollNow(notify) {
+  const btn = notify
+    ? document.getElementById('pollPushBtn')
+    : document.getElementById('pollBtn');
+  const result = document.getElementById('actionResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 轮询中...';
+  result.classList.add('hidden');
+
+  try {
+    const resp = await api('/lark/notify/poll?notify=' + notify, { method: 'POST' });
+    result.classList.remove('hidden');
+    const d = resp.data || {};
+    const info = [
+      '来源: ' + (d.polled_sources ?? '—'),
+      '拉取消息: ' + (d.total_messages ?? '—'),
+      '匹配: ' + (d.matched_messages ?? '—'),
+      '已推送: ' + (d.sent ?? '—'),
+      d.initial_poll_skipped ? '(首次轮询已跳过)' : '',
+      d.errors && d.errors.length ? '错误: ' + d.errors.join('; ') : '',
+    ].filter(Boolean).join(' | ');
+    result.innerHTML = '<span class="badge badge-ok">轮询完成</span> ' + esc(info);
+    loadLarkData();
+  } catch(e) {
+    result.classList.remove('hidden');
+    result.innerHTML = '<span class="badge badge-err">轮询失败</span> ' + esc(e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = notify ? '轮询并推送' : '轮询（不推送）';
+}
+
+async function sendTest() {
+  const btn = document.getElementById('testBtn');
+  const result = document.getElementById('actionResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> 发送中...';
+  result.classList.add('hidden');
+
+  try {
+    const resp = await api('/lark/notify/test', { method: 'POST' });
+    result.classList.remove('hidden');
+    if (resp.success) {
+      result.innerHTML = '<span class="badge badge-ok">测试通知已发送</span> 请查看 Dot 设备';
+    } else {
+      result.innerHTML = '<span class="badge badge-err">发送失败</span> ' + esc(resp.message || '未知错误');
+    }
+  } catch(e) {
+    result.classList.remove('hidden');
+    result.innerHTML = '<span class="badge badge-err">发送失败</span> ' + esc(e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '发送测试通知';
+}
+
+/* ── Init ─────────────────────────────────────────────────── */
+loadLarkData();
+</script>
+{% endblock %}

@@ -25,6 +25,28 @@ class Settings(BaseSettings):
     screen_width: int = 296
     screen_height: int = 152
 
+    # Lark / Feishu polling notification bridge (方案 A)
+    lark_notify_enabled: bool = False
+    lark_notify_cli: str = "lark-cli"
+    lark_notify_cli_timeout_seconds: int = 20
+    lark_notify_identity: str = "user"
+    lark_notify_profile: str = ""
+    lark_notify_chat_ids: str = ""
+    lark_notify_user_ids: str = ""
+    lark_notify_keywords: str = ""
+    lark_notify_mention_ids: str = ""
+    lark_notify_monitor_all: bool = False
+    lark_notify_poll_interval_seconds: int = 60
+    lark_notify_lookback_minutes: int = 10
+    lark_notify_page_size: int = 20
+    lark_notify_skip_existing_on_start: bool = True
+    lark_notify_state_file: str = ".runtime/lark_notify_state.json"
+    lark_notify_max_seen_messages: int = 1000
+    lark_notify_max_messages_per_push: int = 3
+    lark_notify_max_message_chars: int = 48
+    lark_notify_dot_title: str = "飞书通知"
+    lark_notify_dot_signature: str = "Lark Bridge"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
